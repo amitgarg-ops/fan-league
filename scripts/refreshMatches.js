@@ -3,9 +3,14 @@ import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
 // ── Fix private key formatting ─────────────────────────
-const privateKey = process.env.FIREBASE_PRIVATE_KEY
-  ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n")
+
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY
+  ? process.env.FIREBASE_PRIVATE_KEY
+      .replace(/\\n/g, "\n")
+      .replace(/^["']|["']$/g, "")
+      .trim()
   : undefined;
+
 
 // ── Firebase Admin init ────────────────────────────────
 initializeApp({
