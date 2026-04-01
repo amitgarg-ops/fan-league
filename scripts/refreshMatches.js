@@ -1,64 +1,44 @@
 // scripts/refreshMatches.js
-// Run by GitHub Actions daily at noon PST
-// Fetches IPL matches from CricAPI and saves to Firestore
-
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+
+// ── Fix private key formatting ─────────────────────────
+const privateKey = process.env.FIREBASE_PRIVATE_KEY
+  ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n")
+  : undefined;
 
 // ── Firebase Admin init ────────────────────────────────
 initializeApp({
   credential: cert({
     projectId: process.env.VITE_FIREBASE_PROJECT_ID,
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    privateKey,
   }),
 });
 
 const db = getFirestore();
 
-// ── Fetch IPL matches from CricAPI ─────────────────────
-async function fetchIPLMatches() {
-  const apiKey = process.env.CRICAPI_KEY;
-  const url = `https://api.cricapi.com/v1/matches?apikey=${apiKey}&offset=0`;
-
-  const res = await fetch(url);
-  const json = await res.json();
-
-  if (!json.data) {
-    console.log("No data from CricAPI:", json);
-    return [];
-  }
-
-  // Filter for IPL matches only
-  const iplMatches = json.data.filter((m) =>
-    m.name?.toLowerCase().includes("ipl") ||
-    m.series_id === "d5a498c8-7596-4b93-8ab0-e0efc3345312" // IPL 2026 series ID
-  );
-
-  console.log(`Found ${iplMatches.length} IPL matches`);
-  return iplMatches;
-}
-
 // ── IPL Teams config ───────────────────────────────────
 const teamConfig = {
-  "Mumbai Indians":          { flag: "🔵", shortName: "MI"  },
-  "Chennai Super Kings":     { flag: "🟡", shortName: "CSK" },
-  "Royal Challengers Bengaluru": { flag: "🔴", shortName: "RCB" },
-  "Royal Challengers Bangalore": { flag: "🔴", shortName: "RCB" },
-  "Kolkata Knight Riders":   { flag: "🟣", shortName: "KKR" },
-  "Sunrisers Hyderabad":     { flag: "🟠", shortName: "SRH" },
-  "Delhi Capitals":          { flag: "🔷", shortName: "DC"  },
-  "Punjab Kings":            { flag: "🔴", shortName: "PBKS"},
-  "Rajasthan Royals":        { flag: "🩷", shortName: "RR"  },
-  "Gujarat Titans":          { flag: "🔵", shortName: "GT"  },
-  "Lucknow Super Giants":    { flag: "🩵", shortName: "LSG" },
+  "Mumbai Indians":                  { flag: "🔵", shortName: "MI"   },
+  "Chennai Super Kings":             { flag: "🟡", shortName: "CSK"  },
+  "Royal Challengers Bengaluru":     { flag: "🔴", shortName: "RCB"  },
+  "Royal Challengers Bangalore":     { flag: "🔴", shortName: "RCB"  },
+  "Kolkata Knight Riders":           { flag: "🟣", shortName: "KKR"  },
+  "Sunrisers Hyderabad":             { flag: "🟠", shortName: "SRH"  },
+  "Delhi Capitals":                  { flag: "🔷", shortName: "DC"   },
+  "Punjab Kings":                    { flag: "🔴", shortName: "PBKS" },
+  "Rajasthan Royals":                { flag: "🩷", shortName: "RR"   },
+  "Gujarat Titans":                  { flag: "🔵", shortName: "GT"   },
+  "Lucknow Super Giants":            { flag: "🩵", shortName: "LSG"  },
 };
+
+const IPL_TEAMS = new Set(Object.keys(teamConfig));
 
 function getTeamConfig(name) {
   return teamConfig[name] || { flag: "🏏", shortName: name?.slice(0, 3).toUpperCase() };
 }
 
-// ── Format match date ──────────────────────────────────
 function formatMatchTime(dateStr) {
   if (!dateStr) return "Time TBC";
   const date = new Date(dateStr);
@@ -86,10 +66,38 @@ function formatMatchTime(dateStr) {
   }) + ` · ${timeStr}`;
 }
 
-// ── Default odds based on recent form (simple placeholder) ──
-function getDefaultOdds(teamA, teamB) {
-  // Returns [oddsA, oddsB] — will be overridden by admin if needed
-  return [1.9, 1.9];
+// ── Fetch matches from CricAPI ─────────────────────────
+async function fetchIPLMatches() {
+  const apiKey = process.env.CRICAPI_KEY;
+
+  // Try upcoming matches endpoint
+  const url = `https://api.cricapi.com/v1/matches?apikey=${apiKey}&offset=0`;
+  console.log("Fetching from:", url);
+
+  const res = await fetch(url);
+  const json = await res.json();
+  console.log("API status:", json.status);
+  console.log("Total matches returned:", json.data?.length || 0);
+
+  if (!json.data) {
+    console.log("API error:", JSON.stringify(json));
+    return [];
+  }
+
+  // Log all match names so we can see what's available
+  json.data.forEach(m => console.log("Match:", m.name, "| Teams:", m.teams?.join(" vs ")));
+
+  // Filter for IPL — match by team names or "ipl" in name
+  const iplMatches = json.data.filter((m) => {
+    const name = (m.name || "").toLowerCase();
+    const teams = m.teams || [];
+    const hasIPLTeam = teams.some(t => IPL_TEAMS.has(t));
+    const hasIPLInName = name.includes("ipl") || name.includes("indian premier");
+    return hasIPLTeam || hasIPLInName;
+  });
+
+  console.log(`Found ${iplMatches.length} IPL matches`);
+  return iplMatches;
 }
 
 // ── Save matches to Firestore ──────────────────────────
@@ -98,21 +106,20 @@ async function saveMatches(matches) {
 
   // Clear existing upcoming matches
   const existing = await matchesRef.where("status", "==", "upcoming").get();
-  const batch = db.batch();
-  existing.docs.forEach((d) => batch.delete(d.ref));
-  await batch.commit();
+  const deleteBatch = db.batch();
+  existing.docs.forEach((d) => deleteBatch.delete(d.ref));
+  await deleteBatch.commit();
+  console.log(`Deleted ${existing.docs.length} old matches`);
 
   if (matches.length === 0) {
-    console.log("No IPL matches to save — keeping fallback data");
+    console.log("No IPL matches found — Firestore cleared, app will use fallback data");
     return;
   }
 
-  // Save new matches
   for (const m of matches.slice(0, 10)) {
     const teams = m.teams || [];
     const teamA = teams[0] || "Team A";
     const teamB = teams[1] || "Team B";
-    const [oddsA, oddsB] = getDefaultOdds(teamA, teamB);
     const cfgA = getTeamConfig(teamA);
     const cfgB = getTeamConfig(teamB);
 
@@ -121,37 +128,28 @@ async function saveMatches(matches) {
       status: "upcoming",
       time: formatMatchTime(m.dateTimeGMT),
       dateTimeGMT: m.dateTimeGMT || null,
-      teamA: {
-        name: teamA,
-        flag: cfgA.flag,
-        shortName: cfgA.shortName,
-        odds: oddsA,
-        picks: 0,
-      },
-      teamB: {
-        name: teamB,
-        flag: cfgB.flag,
-        shortName: cfgB.shortName,
-        odds: oddsB,
-        picks: 0,
-      },
+      teamA: { name: teamA, flag: cfgA.flag, shortName: cfgA.shortName, odds: 1.9, picks: 0 },
+      teamB: { name: teamB, flag: cfgB.flag, shortName: cfgB.shortName, odds: 1.9, picks: 0 },
       updatedAt: new Date().toISOString(),
     });
-    console.log(`Saved: ${teamA} vs ${teamB}`);
+    console.log(`✅ Saved: ${teamA} vs ${teamB}`);
   }
-
-  console.log("✅ Matches updated in Firestore!");
 }
 
 // ── Main ───────────────────────────────────────────────
 async function main() {
   console.log("🏏 Refreshing IPL matches...");
+  console.log("Project:", process.env.VITE_FIREBASE_PROJECT_ID);
+  console.log("Client email:", process.env.FIREBASE_CLIENT_EMAIL);
+
   const matches = await fetchIPLMatches();
   await saveMatches(matches);
+
+  console.log("✅ Done!");
   process.exit(0);
 }
 
 main().catch((err) => {
-  console.error("❌ Error:", err);
+  console.error("❌ Error:", err.message);
   process.exit(1);
 });
