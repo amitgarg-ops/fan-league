@@ -71,7 +71,8 @@ async function fetchIPLMatches() {
   const apiKey = process.env.CRICAPI_KEY;
 
   // Try upcoming matches endpoint
-  const url = `https://api.cricapi.com/v1/matches?apikey=${apiKey}&offset=0`;
+
+  const url = `https://api.cricapi.com/v1/currentMatches?apikey=${apiKey}&offset=0`;
   console.log("Fetching from:", url);
 
   const res = await fetch(url);
