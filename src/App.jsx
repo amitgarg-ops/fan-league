@@ -337,18 +337,53 @@ function HomePage({ user }) {
       // Create or update user profile in Firestore
       const userRef = doc(db, "users", u.uid);
       const userSnap = await getDoc(userRef);
-      if (!userSnap.exists()) {
-        await setDoc(userRef, {
-          uid: u.uid,
-          displayName: u.displayName || u.phoneNumber || "Player",
-          email: u.email || "",
-          photoURL: u.photoURL || "",
-          totalPoints: 0,
-          picksCount: 0,
-          correctCount: 0,
-          createdAt: serverTimestamp(),
-        });
-      }
+
+    
+    if (!userSnap.exists()) {
+  await setDoc(userRef, {
+    uid: u.uid,
+    displayName: u.displayName || u.phoneNumber || "Player",
+    email: u.email || "",
+    photoURL: u.photoURL || "",
+    totalPoints: 0,
+    picksCount: 0,
+    correctCount: 0,
+    bracketId: "default",
+    createdAt: serverTimestamp(),
+  });
+}
+
+// Make sure default bracket exists
+const bracketRef = doc(db, "brackets", "default");
+const bracketSnap = await getDoc(bracketRef);
+if (!bracketSnap.exists()) {
+  await setDoc(bracketRef, {
+    id: "default",
+    name: "IPL Fan League 2026",
+    adminId: "MIP10AFAjuen2QmeEJZzz3Nt1nF3",
+    inviteCode: "ipl2026",
+    status: "active",
+    createdAt: serverTimestamp(),
+  });
+}
+
+// Add user to default bracket members
+const memberRef = doc(db, "brackets", "default", "members", u.uid);
+await setDoc(memberRef, {
+  uid: u.uid,
+  displayName: u.displayName || u.phoneNumber || "Player",
+  joinedAt: serverTimestamp(),
+}, { merge: true });
+
+
+    
+    
+    
+    
+    
+    
+    
+    
     }
     setUser(u);
     setAuthReady(true);
@@ -385,26 +420,47 @@ function HomePage({ user }) {
 
 // ── Leaderboard Page ───────────────────────────────────
 
- function LeaderboardPage() {
+function LeaderboardPage({ user }) {
   const [players, setPlayers] = useState([]);
+  const [bracketName, setBracketName] = useState("Your League");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadLeaderboard() {
       try {
-        const q = query(
-          collection(db, "users"),
-          orderBy("totalPoints", "desc")
+        // Get bracket info
+        const bracketSnap = await getDoc(doc(db, "brackets", "default"));
+        if (bracketSnap.exists()) {
+          setBracketName(bracketSnap.data().name);
+        }
+
+        // Get bracket members
+        const membersSnap = await getDocs(
+          collection(db, "brackets", "default", "members")
         );
-        const snap = await getDocs(q);
-        const data = snap.docs.map((d, i) => ({
-          rank: i + 1,
-          name: d.data().displayName || "Player",
-          points: d.data().totalPoints || 0,
-          correct: d.data().correctCount || 0,
-          picks: d.data().picksCount || 0,
-        }));
-        setPlayers(data);
+        const memberIds = membersSnap.docs.map(d => d.id);
+
+        // Get user profiles for members
+        const playerData = [];
+        for (const uid of memberIds) {
+          const userSnap = await getDoc(doc(db, "users", uid));
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+            playerData.push({
+              uid,
+              name: data.displayName || "Player",
+              points: data.totalPoints || 0,
+              correct: data.correctCount || 0,
+              picks: data.picksCount || 0,
+              isMe: uid === user.uid,
+            });
+          }
+        }
+
+        // Sort by points
+        playerData.sort((a, b) => b.points - a.points);
+        playerData.forEach((p, i) => p.rank = i + 1);
+        setPlayers(playerData);
       } catch (err) {
         console.error("Error loading leaderboard:", err);
       } finally {
@@ -412,36 +468,47 @@ function HomePage({ user }) {
       }
     }
     loadLeaderboard();
-  }, []);
+  }, [user.uid]);
 
   return (
     <div className="page">
       <div className="page-header">
         <h2>🏆 Leaderboard</h2>
-        <p>All players · IPL 2026</p>
+        <p>{bracketName}</p>
       </div>
 
       {loading ? (
         <div className="loading-card">Loading rankings...</div>
       ) : players.length === 0 ? (
-        <div className="loading-card">No players yet — be the first to make a pick!</div>
+        <div className="loading-card">No players yet!</div>
       ) : (
         <div className="leaderboard">
           {players.map((p) => (
-            <div key={p.rank} className={`lb-row ${p.rank <= 3 ? "top-three" : ""}`}>
+            <div key={p.uid} className={`lb-row ${p.rank <= 3 ? "top-three" : ""} ${p.isMe ? "lb-row--me" : ""}`}>
               <span className="lb-rank">
                 {p.rank === 1 ? "🥇" : p.rank === 2 ? "🥈" : p.rank === 3 ? "🥉" : p.rank}
               </span>
-              <span className="lb-name">{p.name}</span>
+              <span className="lb-name">{p.name} {p.isMe ? "👈" : ""}</span>
               <span className="lb-picks">{p.correct}/{p.picks}</span>
               <span className="lb-points">{p.points} pts</span>
             </div>
           ))}
         </div>
       )}
+
+      <div className="invite-box">
+        <div className="invite-title">📨 Invite Friends</div>
+        <div className="invite-link">amitgarg-ops.github.io/fan-league</div>
+        <button className="invite-btn" onClick={() => {
+          navigator.clipboard.writeText("https://amitgarg-ops.github.io/fan-league");
+          alert("Link copied! Share it with friends 🏏");
+        }}>
+          Copy Invite Link
+        </button>
+      </div>
     </div>
   );
- }
+}
 
 // ── Profile Page ───────────────────────────────────────
 function ProfilePage({ user, onSignOut }) {
@@ -507,7 +574,7 @@ export default function App() {
 
   const renderPage = () => {
     if (activeTab === "home")        return <HomePage user={user} />;
-    if (activeTab === "leaderboard") return <LeaderboardPage />;
+    if (activeTab === "leaderboard") return <LeaderboardPage user={user} />;
     if (activeTab === "profile")     return <ProfilePage user={user} onSignOut={handleSignOut} />;
   };
 
