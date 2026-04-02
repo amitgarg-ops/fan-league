@@ -21,7 +21,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
-// ── Fallback matches (shown if Firestore has no data yet) ──
+const ADMIN_UID = "MIP10AFAjuen2QmeEJZzz3Nt1nF3";
+
 const FALLBACK_MATCHES = [
   {
     id: "fallback1",
@@ -137,10 +138,8 @@ function LoginScreen({ onLogin }) {
         <span className="login-emoji">🏏</span>
         <h1 className="login-title">IPL Fan League</h1>
         <p className="login-sub">Sign in to make picks and compete with friends</p>
-
         {error && <div className="login-error">{error}</div>}
         {step === "loading" && <div className="login-loading">Signing you in...</div>}
-
         {step === "start" && (
           <>
             <button className="btn-google" onClick={handleGoogleLogin}>
@@ -152,9 +151,7 @@ function LoginScreen({ onLogin }) {
               </svg>
               Continue with Google
             </button>
-
             <div className="login-divider"><span>or</span></div>
-
             <input
               className="login-input"
               type="tel"
@@ -162,12 +159,9 @@ function LoginScreen({ onLogin }) {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
-            <button className="btn-phone" onClick={handleSendOtp}>
-              Send OTP →
-            </button>
+            <button className="btn-phone" onClick={handleSendOtp}>Send OTP →</button>
           </>
         )}
-
         {step === "otp" && (
           <>
             <p className="otp-hint">Enter the 6-digit code sent to {phone}</p>
@@ -179,12 +173,8 @@ function LoginScreen({ onLogin }) {
               onChange={(e) => setOtp(e.target.value)}
               maxLength={6}
             />
-            <button className="btn-phone" onClick={handleVerifyOtp}>
-              Verify & Sign In →
-            </button>
-            <button className="btn-resend" onClick={() => setStep("start")}>
-              ← Use a different number
-            </button>
+            <button className="btn-phone" onClick={handleVerifyOtp}>Verify & Sign In →</button>
+            <button className="btn-resend" onClick={() => setStep("start")}>← Use a different number</button>
           </>
         )}
         <div id="recaptcha-container" />
@@ -254,9 +244,7 @@ function MatchCard({ match, user }) {
     ? Math.round(100 * (selected === "A" ? match.teamA.odds : match.teamB.odds))
     : null;
 
-  if (loadingPick) {
-    return <div className="match-card loading-card">Loading...</div>;
-  }
+  if (loadingPick) return <div className="match-card loading-card">Loading...</div>;
 
   return (
     <div className="match-card">
@@ -276,9 +264,7 @@ function MatchCard({ match, user }) {
             </div>
           )}
         </div>
-
         <div className="vs">VS</div>
-
         <div
           className={`team ${selected === "B" ? "selected" : ""} ${selected && selected !== "B" ? "loser" : ""}`}
           onClick={() => handleSelect("B")}
@@ -295,15 +281,12 @@ function MatchCard({ match, user }) {
           )}
         </div>
       </div>
-
       <div className="match-meta">{match.time}</div>
-
       {selected && !locked && (
         <div className="points-hint">
           If {selected === "A" ? match.teamA.name : match.teamB.name} win → you earn <strong>{pointsIfWin} pts</strong>
         </div>
       )}
-
       {!locked ? (
         <button
           className={`pick-btn ${selected ? "pick-btn--ready" : "pick-btn--disabled"}`}
@@ -323,9 +306,7 @@ function MatchCard({ match, user }) {
   );
 }
 
-// ── Home Page (loads matches from Firestore) ───────────
-const ADMIN_UID = "MIP10AFAjuen2QmeEJZzz3Nt1nF3";
-
+// ── Home Page ──────────────────────────────────────────
 function HomePage({ user }) {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -334,10 +315,7 @@ function HomePage({ user }) {
   async function loadMatches() {
     setLoading(true);
     try {
-      const q = query(
-        collection(db, "matches"),
-        where("status", "==", "upcoming"),
-      );
+      const q = query(collection(db, "matches"), where("status", "==", "upcoming"));
       const snap = await getDocs(q);
       if (snap.empty) {
         setMatches(FALLBACK_MATCHES);
@@ -353,53 +331,7 @@ function HomePage({ user }) {
     }
   }
 
-  useEffect(() => {
-    loadMatches();
-  }, []);
-  
-  // rest of return...
-}
-
-
-
-
-// Make sure default bracket exists
-const bracketRef = doc(db, "brackets", "default");
-const bracketSnap = await getDoc(bracketRef);
-if (!bracketSnap.exists()) {
-  await setDoc(bracketRef, {
-    id: "default",
-    name: "IPL Fan League 2026",
-    adminId: "MIP10AFAjuen2QmeEJZzz3Nt1nF3",
-    inviteCode: "ipl2026",
-    status: "active",
-    createdAt: serverTimestamp(),
-  });
-}
-
-// Add user to default bracket members
-const memberRef = doc(db, "brackets", "default", "members", u.uid);
-await setDoc(memberRef, {
-  uid: u.uid,
-  displayName: u.displayName || u.phoneNumber || "Player",
-  joinedAt: serverTimestamp(),
-}, { merge: true });
-
-
-    
-    
-    
-    
-    
-    
-    
-    
-    }
-    setUser(u);
-    setAuthReady(true);
-  });
-  return unsub;
- }, []);
+  useEffect(() => { loadMatches(); }, []);
 
   return (
     <div className="page">
@@ -408,15 +340,12 @@ await setDoc(memberRef, {
         <h1>IPL Fan League</h1>
         <p>Pick match winners. Earn points. Beat your friends.</p>
       </div>
-
       {isAdmin && (
         <button className="admin-refresh-btn" onClick={loadMatches}>
           🔄 Refresh Matches
         </button>
       )}
-
       <div className="section-label">Upcoming Matches</div>
-
       {loading ? (
         <div className="loading-card">Loading matches...</div>
       ) : (
@@ -429,7 +358,6 @@ await setDoc(memberRef, {
 }
 
 // ── Leaderboard Page ───────────────────────────────────
-
 function LeaderboardPage({ user }) {
   const [players, setPlayers] = useState([]);
   const [bracketName, setBracketName] = useState("Your League");
@@ -438,19 +366,12 @@ function LeaderboardPage({ user }) {
   useEffect(() => {
     async function loadLeaderboard() {
       try {
-        // Get bracket info
         const bracketSnap = await getDoc(doc(db, "brackets", "default"));
-        if (bracketSnap.exists()) {
-          setBracketName(bracketSnap.data().name);
-        }
+        if (bracketSnap.exists()) setBracketName(bracketSnap.data().name);
 
-        // Get bracket members
-        const membersSnap = await getDocs(
-          collection(db, "brackets", "default", "members")
-        );
-        const memberIds = membersSnap.docs.map(d => d.id);
+        const membersSnap = await getDocs(collection(db, "brackets", "default", "members"));
+        const memberIds = membersSnap.docs.map((d) => d.id);
 
-        // Get user profiles for members
         const playerData = [];
         for (const uid of memberIds) {
           const userSnap = await getDoc(doc(db, "users", uid));
@@ -467,9 +388,8 @@ function LeaderboardPage({ user }) {
           }
         }
 
-        // Sort by points
         playerData.sort((a, b) => b.points - a.points);
-        playerData.forEach((p, i) => p.rank = i + 1);
+        playerData.forEach((p, i) => (p.rank = i + 1));
         setPlayers(playerData);
       } catch (err) {
         console.error("Error loading leaderboard:", err);
@@ -486,11 +406,10 @@ function LeaderboardPage({ user }) {
         <h2>🏆 Leaderboard</h2>
         <p>{bracketName}</p>
       </div>
-
       {loading ? (
         <div className="loading-card">Loading rankings...</div>
       ) : players.length === 0 ? (
-        <div className="loading-card">No players yet!</div>
+        <div className="loading-card">No players yet — be the first to make a pick!</div>
       ) : (
         <div className="leaderboard">
           {players.map((p) => (
@@ -498,14 +417,13 @@ function LeaderboardPage({ user }) {
               <span className="lb-rank">
                 {p.rank === 1 ? "🥇" : p.rank === 2 ? "🥈" : p.rank === 3 ? "🥉" : p.rank}
               </span>
-              <span className="lb-name">{p.name} {p.isMe ? "👈" : ""}</span>
+              <span className="lb-name">{p.name}{p.isMe ? " 👈" : ""}</span>
               <span className="lb-picks">{p.correct}/{p.picks}</span>
               <span className="lb-points">{p.points} pts</span>
             </div>
           ))}
         </div>
       )}
-
       <div className="invite-box">
         <div className="invite-title">📨 Invite Friends</div>
         <div className="invite-link">amitgarg-ops.github.io/fan-league</div>
@@ -522,8 +440,21 @@ function LeaderboardPage({ user }) {
 
 // ── Profile Page ───────────────────────────────────────
 function ProfilePage({ user, onSignOut }) {
+  const [stats, setStats] = useState({ totalPoints: 0, picksCount: 0, correctCount: 0 });
+
+  useEffect(() => {
+    async function loadStats() {
+      const userSnap = await getDoc(doc(db, "users", user.uid));
+      if (userSnap.exists()) setStats(userSnap.data());
+    }
+    loadStats();
+  }, [user.uid]);
+
   const displayName = user.displayName || user.phoneNumber || "Player";
   const initials = displayName.slice(0, 2).toUpperCase();
+  const accuracy = stats.picksCount > 0
+    ? Math.round((stats.correctCount / stats.picksCount) * 100) + "%"
+    : "—";
 
   return (
     <div className="page">
@@ -532,23 +463,22 @@ function ProfilePage({ user, onSignOut }) {
       <p className="profile-sub">{user.email || user.phoneNumber}</p>
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-value">0</div>
+          <div className="stat-value">{stats.totalPoints}</div>
           <div className="stat-label">Total Points</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">0</div>
+          <div className="stat-value">{stats.picksCount}</div>
           <div className="stat-label">Picks Made</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">0</div>
+          <div className="stat-value">{stats.correctCount}</div>
           <div className="stat-label">Correct</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">—</div>
+          <div className="stat-value">{accuracy}</div>
           <div className="stat-label">Accuracy</div>
         </div>
       </div>
-      <div className="uid-box">Your UID: {user.uid}</div>
       <button className="sign-out-btn" onClick={onSignOut}>Sign Out</button>
     </div>
   );
@@ -567,7 +497,52 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("home");
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        try {
+          // Create user profile if first time
+          const userRef = doc(db, "users", u.uid);
+          const userSnap = await getDoc(userRef);
+          if (!userSnap.exists()) {
+            await setDoc(userRef, {
+              uid: u.uid,
+              displayName: u.displayName || u.phoneNumber || "Player",
+              email: u.email || "",
+              photoURL: u.photoURL || "",
+              totalPoints: 0,
+              picksCount: 0,
+              correctCount: 0,
+              bracketId: "default",
+              createdAt: serverTimestamp(),
+            });
+          }
+
+          // Create default bracket if it doesn't exist
+          const bracketRef = doc(db, "brackets", "default");
+          const bracketSnap = await getDoc(bracketRef);
+          if (!bracketSnap.exists()) {
+            await setDoc(bracketRef, {
+              id: "default",
+              name: "IPL Fan League 2026",
+              adminId: ADMIN_UID,
+              inviteCode: "ipl2026",
+              status: "active",
+              createdAt: serverTimestamp(),
+            });
+          }
+
+          // Add user to bracket members
+          const memberRef = doc(db, "brackets", "default", "members", u.uid);
+          await setDoc(memberRef, {
+            uid: u.uid,
+            displayName: u.displayName || u.phoneNumber || "Player",
+            joinedAt: serverTimestamp(),
+          }, { merge: true });
+
+        } catch (err) {
+          console.error("Error setting up user:", err);
+        }
+      }
       setUser(u);
       setAuthReady(true);
     });
