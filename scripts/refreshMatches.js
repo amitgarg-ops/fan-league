@@ -141,7 +141,7 @@ async function awardPoints(matchId, winnerName, teams) {
   // Check if already scored
   const matchRef = db.collection("matches").doc(matchId);
   const matchSnap = await matchRef.get();
-  if (matchSnap.exists() && matchSnap.data().scored) {
+  if (matchSnap.exists && matchSnap.data().scored) {
     console.log("Already scored — skipping");
     return;
   }
@@ -226,7 +226,7 @@ async function saveUpcomingMatches(matches) {
     const matchRef = db.collection("matches").doc(m.id);
     const existing = await matchRef.get();
 
-    if (!existing.exists()) {
+    if (!existing.exists) {
       await matchRef.set({
         id: m.id,
         status: "upcoming",
