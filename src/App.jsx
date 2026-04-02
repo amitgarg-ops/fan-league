@@ -331,27 +331,37 @@ function HomePage({ user }) {
   const [loading, setLoading] = useState(true);
   const isAdmin = user.uid === ADMIN_UID;
 
- useEffect(() => {
-  const unsub = onAuthStateChanged(auth, async (u) => {
-    if (u) {
-      // Create or update user profile in Firestore
-      const userRef = doc(db, "users", u.uid);
-      const userSnap = await getDoc(userRef);
+  async function loadMatches() {
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, "matches"),
+        where("status", "==", "upcoming"),
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        setMatches(FALLBACK_MATCHES);
+      } else {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setMatches(data);
+      }
+    } catch (err) {
+      console.error("Error loading matches:", err);
+      setMatches(FALLBACK_MATCHES);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-    
-    if (!userSnap.exists()) {
-  await setDoc(userRef, {
-    uid: u.uid,
-    displayName: u.displayName || u.phoneNumber || "Player",
-    email: u.email || "",
-    photoURL: u.photoURL || "",
-    totalPoints: 0,
-    picksCount: 0,
-    correctCount: 0,
-    bracketId: "default",
-    createdAt: serverTimestamp(),
-  });
+  useEffect(() => {
+    loadMatches();
+  }, []);
+  
+  // rest of return...
 }
+
+
+
 
 // Make sure default bracket exists
 const bracketRef = doc(db, "brackets", "default");
