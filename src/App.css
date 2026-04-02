@@ -564,7 +564,7 @@ body {
   cursor: pointer;
 }
 
-.uid-box {
+ .uid-box {
   width: 100%;
   background: #F5F5F5;
   border-radius: 10px;
@@ -573,4 +573,11 @@ body {
   color: #888;
   word-break: break-all;
   text-align: center;
-}
+ }
+
+ .lb-picks {
+  font-size: 12px;
+  color: #888;
+  min-width: 36px;
+  text-align: center;
+ }

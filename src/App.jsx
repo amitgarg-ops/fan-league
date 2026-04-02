@@ -331,31 +331,30 @@ function HomePage({ user }) {
   const [loading, setLoading] = useState(true);
   const isAdmin = user.uid === ADMIN_UID;
 
-  useEffect(() => {
-    loadMatches();
-  }, []);
-
-  async function loadMatches() {
-    setLoading(true);
-    try {
-      const q = query(
-        collection(db, "matches"),
-        where("status", "==", "upcoming"),
-      );
-      const snap = await getDocs(q);
-      if (snap.empty) {
-        setMatches(FALLBACK_MATCHES);
-      } else {
-        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setMatches(data);
+ useEffect(() => {
+  const unsub = onAuthStateChanged(auth, async (u) => {
+    if (u) {
+      // Create or update user profile in Firestore
+      const userRef = doc(db, "users", u.uid);
+      const userSnap = await getDoc(userRef);
+      if (!userSnap.exists()) {
+        await setDoc(userRef, {
+          uid: u.uid,
+          displayName: u.displayName || u.phoneNumber || "Player",
+          email: u.email || "",
+          photoURL: u.photoURL || "",
+          totalPoints: 0,
+          picksCount: 0,
+          correctCount: 0,
+          createdAt: serverTimestamp(),
+        });
       }
-    } catch (err) {
-      console.error("Error loading matches:", err);
-      setMatches(FALLBACK_MATCHES);
-    } finally {
-      setLoading(false);
     }
-  }
+    setUser(u);
+    setAuthReady(true);
+  });
+  return unsub;
+ }, []);
 
   return (
     <div className="page">
@@ -385,36 +384,64 @@ function HomePage({ user }) {
 }
 
 // ── Leaderboard Page ───────────────────────────────────
-function LeaderboardPage() {
-  const players = [
-    { rank: 1, name: "Rahul S.",  points: 840, trend: "↑" },
-    { rank: 2, name: "Priya M.",  points: 720, trend: "↑" },
-    { rank: 3, name: "Amit G.",   points: 680, trend: "→" },
-    { rank: 4, name: "Sneha K.",  points: 530, trend: "↓" },
-    { rank: 5, name: "Dev P.",    points: 490, trend: "↑" },
-  ];
+
+ function LeaderboardPage() {
+  const [players, setPlayers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadLeaderboard() {
+      try {
+        const q = query(
+          collection(db, "users"),
+          orderBy("totalPoints", "desc")
+        );
+        const snap = await getDocs(q);
+        const data = snap.docs.map((d, i) => ({
+          rank: i + 1,
+          name: d.data().displayName || "Player",
+          points: d.data().totalPoints || 0,
+          correct: d.data().correctCount || 0,
+          picks: d.data().picksCount || 0,
+        }));
+        setPlayers(data);
+      } catch (err) {
+        console.error("Error loading leaderboard:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadLeaderboard();
+  }, []);
 
   return (
     <div className="page">
       <div className="page-header">
         <h2>🏆 Leaderboard</h2>
-        <p>Your bracket · IPL 2026</p>
+        <p>All players · IPL 2026</p>
       </div>
-      <div className="leaderboard">
-        {players.map((p) => (
-          <div key={p.rank} className={`lb-row ${p.rank <= 3 ? "top-three" : ""}`}>
-            <span className="lb-rank">
-              {p.rank === 1 ? "🥇" : p.rank === 2 ? "🥈" : p.rank === 3 ? "🥉" : p.rank}
-            </span>
-            <span className="lb-name">{p.name}</span>
-            <span className="lb-trend">{p.trend}</span>
-            <span className="lb-points">{p.points} pts</span>
-          </div>
-        ))}
-      </div>
+
+      {loading ? (
+        <div className="loading-card">Loading rankings...</div>
+      ) : players.length === 0 ? (
+        <div className="loading-card">No players yet — be the first to make a pick!</div>
+      ) : (
+        <div className="leaderboard">
+          {players.map((p) => (
+            <div key={p.rank} className={`lb-row ${p.rank <= 3 ? "top-three" : ""}`}>
+              <span className="lb-rank">
+                {p.rank === 1 ? "🥇" : p.rank === 2 ? "🥈" : p.rank === 3 ? "🥉" : p.rank}
+              </span>
+              <span className="lb-name">{p.name}</span>
+              <span className="lb-picks">{p.correct}/{p.picks}</span>
+              <span className="lb-points">{p.points} pts</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
-}
+ }
 
 // ── Profile Page ───────────────────────────────────────
 function ProfilePage({ user, onSignOut }) {
